@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>速刷日语 - 日语即时闪卡</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* 3D 卡片翻转效果 */
+    .perspective-1000 {
+      perspective: 1000px;
+    }
+    .transform-style-3d {
+      transform-style: preserve-3d;
+    }
+    .backface-hidden {
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+    .rotate-y-180 {
+      transform: rotateY(180deg);
+    }
+    /* 隐藏滚动条但保留滚动功能 */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans select-none overflow-x-hidden">
+
+  <!-- 顶部导航栏 -->
+  <header class="bg-slate-800/80 backdrop-blur border-b border-slate-700/60 px-4 py-3 sticky top-0 z-20 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <button id="btnOpenDrawer" class="p-2 hover:bg-slate-700 rounded-lg text-slate-300 transition" title="卡片目录与牌组">
+        <i data-lucide="menu" class="w-5 h-5"></i>
+      </button>
+      <div>
+        <h1 id="currentDeckTitle" class="text-base font-bold text-slate-100 flex items-center gap-2">
+          加载中...
+        </h1>
+        <p id="deckProgressText" class="text-xs text-slate-400">0 / 0</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <!-- 语速选择 -->
+      <select id="voiceSpeedSelect" class="bg-slate-700 border border-slate-600 text-xs text-slate-200 rounded px-2 py-1.5 focus:outline-none">
+        <option value="0.8">0.8x 语速</option>
+        <option value="1.0" selected>1.0x 语速</option>
+        <option value="1.2">1.2x 语速</option>
+      </select>
+
+      <!-- 批量导入按钮 -->
+      <button id="btnOpenImport" class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow transition">
+        <i data-lucide="plus-circle" class="w-4 h-4"></i>
+        <span>导入</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 刷卡核心区域 -->
+  <main class="flex-1 flex flex-col items-center justify-center p-4 max-w-xl mx-auto w-full relative">
+    
+    <!-- 进度条 -->
+    <div class="w-full bg-slate-800 rounded-full h-1.5 mb-6 overflow-hidden">
+      <div id="progressBar" class="bg-indigo-500 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+    </div>
+
+    <!-- 卡片容器 -->
+    <div class="w-full aspect-[4/3] sm:aspect-[16/10] max-h-[380px] perspective-1000 cursor-pointer" id="cardContainer">
+      <div id="cardInner" class="w-full h-full relative transform-style-3d transition-transform duration-500 rounded-2xl shadow-2xl">
+        
+        <!-- 正面 -->
+        <div class="absolute inset-0 backface-hidden bg-gradient-to-br from-slate-800 to-slate-800/90 border border-slate-700 rounded-2xl flex flex-col items-center justify-center p-6 text-center shadow-lg hover:border-slate-600 transition">
+          <span class="text-xs font-medium uppercase tracking-wider text-indigo-400 mb-4 bg-indigo-950/60 px-3 py-1 rounded-full border border-indigo-800/50">
+            看到立刻发音 · 翻面校对
+          </span>
+          <div id="cardFrontText" class="text-4xl sm:text-5xl font-black text-slate-50 tracking-wide my-auto break-words max-w-full">
+            ...
+          </div>
+          <div class="text-xs text-slate-500 mt-auto flex items-center gap-1.5">
+            <i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5"></i>
+            <span>轻触或按 [空格] 翻转并朗读</span>
+          </div>
+        </div>
+
+        <!-- 背面 -->
+        <div class="absolute inset-0 backface-hidden rotate-y-180 bg-gradient-to-br from-slate-800 via-indigo-950/20 to-slate-800 border-2 border-indigo-500/40 rounded-2xl flex flex-col items-center justify-between p-6 text-center shadow-2xl">
+          <div class="w-full flex justify-between items-center text-xs text-slate-400">
+            <span class="text-emerald-400 font-medium">标准读音 & 释义</span>
+            <button id="btnReplayVoice" class="p-2 hover:bg-slate-700/60 rounded-full text-indigo-400 transition" title="重播读音 (R)">
+              <i data-lucide="volume-2" class="w-5 h-5"></i>
+            </button>
+          </div>
+
+          <div class="my-auto space-y-2">
+            <div id="cardBackFurigana" class="text-2xl sm:text-3xl font-bold text-indigo-300">
+              ...
+            </div>
+            <div id="cardBackMeaning" class="text-lg sm:text-xl font-medium text-slate-200">
+              ...
+            </div>
+          </div>
+
+          <div class="text-xs text-slate-500">
+            判断发音是否准确，选择下方按钮
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 底部操作按钮 -->
+    <div class="w-full grid grid-cols-3 gap-3 mt-8">
+      <button id="btnFail" class="flex flex-col sm:flex-row items-center justify-center gap-1.5 py-3.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/50 text-rose-300 rounded-xl font-semibold transition active:scale-95 shadow">
+        <i data-lucide="x" class="w-5 h-5"></i>
+        <span>生疏 <span class="text-xs opacity-60 hidden sm:inline">[←]</span></span>
+      </button>
+
+      <button id="btnFlip" class="flex flex-col sm:flex-row items-center justify-center gap-1.5 py-3.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-xl font-semibold transition active:scale-95 shadow">
+        <i data-lucide="rotate-cw" class="w-5 h-5"></i>
+        <span>翻面 <span class="text-xs opacity-60 hidden sm:inline">[空格]</span></span>
+      </button>
+
+      <button id="btnPass" class="flex flex-col sm:flex-row items-center justify-center gap-1.5 py-3.5 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 rounded-xl font-semibold transition active:scale-95 shadow">
+        <i data-lucide="check" class="w-5 h-5"></i>
+        <span>掌握 <span class="text-xs opacity-60 hidden sm:inline">[→]</span></span>
+      </button>
+    </div>
+
+  </main>
+
+  <!-- 侧边栏抽屉：牌组与卡片目录 -->
+  <aside id="drawer" class="fixed inset-y-0 left-0 w-80 max-w-[85vw] bg-slate-850 bg-slate-900 border-r border-slate-800 z-40 transform -translate-x-full transition-transform duration-300 flex flex-col shadow-2xl">
+    <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="library" class="w-5 h-5 text-indigo-400"></i>
+        <span class="font-bold text-slate-100">卡片目录与牌组</span>
+      </div>
+      <button id="btnCloseDrawer" class="p-1 hover:bg-slate-800 rounded-lg text-slate-400">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+
+    <!-- 牌组切换 -->
+    <div class="p-4 border-b border-slate-800">
+      <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">当前牌组</label>
+      <div class="flex gap-2">
+        <select id="deckSelector" class="flex-1 bg-slate-800 border border-slate-700 text-sm text-slate-200 rounded-lg px-3 py-2 focus:outline-none"></select>
+        <button id="btnNewDeckPrompt" class="px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300" title="新建牌组">
+          <i data-lucide="folder-plus" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- 当前牌组卡片检索列表 -->
+    <div class="flex-1 overflow-y-auto p-4 no-scrollbar">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">词条列表 (<span id="drawerCardCount">0</span>)</span>
+        <button id="btnExportJSON" class="text-xs text-indigo-400 hover:underline flex items-center gap-1">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i> 导出备份
+        </button>
+      </div>
+      <div id="drawerCardList" class="space-y-2">
+        <!-- 列表项动态插入 -->
+      </div>
+    </div>
+
+    <!-- 侧边栏底部操作 -->
+    <div class="p-4 border-t border-slate-800 space-y-2">
+      <button id="btnDeleteCurrentDeck" class="w-full py-2 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40 text-rose-400 text-xs rounded-lg transition flex items-center justify-center gap-1.5">
+        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+        <span>删除当前牌组</span>
+      </button>
+    </div>
+  </aside>
+  <!-- 抽屉遮罩 -->
+  <div id="drawerOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 hidden"></div>
+
+  <!-- 批量导入模态框 -->
+  <div id="importModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
+    <div class="bg-slate-850 bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl flex flex-col max-h-[90vh]">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 class="font-bold text-slate-100 flex items-center gap-2">
+          <i data-lucide="file-up" class="w-5 h-5 text-indigo-400"></i>
+          <span>批量导入卡片</span>
+        </h3>
+        <button id="btnCloseImport" class="p-1 hover:bg-slate-800 rounded-lg text-slate-400">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="py-4 space-y-4 flex-1 overflow-y-auto">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">目标牌组</label>
+          <input type="text" id="importDeckName" placeholder="例如：新标日初级上册 / IT日语" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">正面与背面的分隔符</label>
+          <div class="grid grid-cols-4 gap-2">
+            <button type="button" class="sep-btn py-1.5 px-2 bg-indigo-600 border border-indigo-500 rounded text-xs font-medium text-white" data-sep="\t">Tab 制表符</button>
+            <button type="button" class="sep-btn py-1.5 px-2 bg-slate-800 border border-slate-700 rounded text-xs font-medium text-slate-300" data-sep="|">竖线 (|)</button>
+            <button type="button" class="sep-btn py-1.5 px-2 bg-slate-800 border border-slate-700 rounded text-xs font-medium text-slate-300" data-sep=",">逗号 (,)</button>
+            <button type="button" class="sep-btn py-1.5 px-2 bg-slate-800 border border-slate-700 rounded text-xs font-medium text-slate-300" data-sep="#">井号 (#)</button>
+          </div>
+          <input type="text" id="customSeparator" placeholder="或自定义分隔符（默认 Tab）" class="mt-2 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">粘贴数据内容（一行一张卡片）</label>
+          <div class="text-[11px] text-slate-400 mb-1">格式规范：<code>卡片正面 [分隔符] 假名发音 [分隔符(可选)] 中文释义</code></div>
+          <textarea id="importTextarea" rows="6" placeholder="会社 | かいしゃ | 公司&#10;開発 | かいはつ | 开发&#10;会議 | かいぎ | 开会" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500"></textarea>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
+        <button id="btnCancelImport" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg">取消</button>
+        <button id="btnExecuteImport" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow">确认导入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 脚本逻辑 -->
+  <script>
+    // --- IndexedDB 封装层 ---
+    const DB_NAME = 'QuickJapaneseFlashcardsDB';
+    const DB_VERSION = 1;
+    let db;
+
+    function initDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = (e) => {
+          const dbInstance = e.target.result;
+          if (!dbInstance.objectStoreNames.contains('decks')) {
+            dbInstance.createObjectStore('decks', { keyPath: 'id' });
+          }
+          if (!dbInstance.objectStoreNames.contains('cards')) {
+            const cardStore = dbInstance.createObjectStore('cards', { keyPath: 'id' });
+            cardStore.createIndex('deckId', 'deckId', { unique: false });
+          }
+        };
+        request.onsuccess = (e) => {
+          db = e.target.result;
+          resolve(db);
+        };
+        request.onerror = (e) => reject(e);
+      });
+    }
+
+    const dbService = {
+      async getAllDecks() {
+        return new Promise((res, rej) => {
+          const tx = db.transaction('decks', 'readonly');
+          const req = tx.objectStore('decks').getAll();
+          req.onsuccess = () => res(req.result || []);
+          req.onerror = rej;
+        });
+      },
+      async saveDeck(deck) {
+        return new Promise((res, rej) => {
+          const tx = db.transaction('decks', 'readwrite');
+          tx.objectStore('decks').put(deck);
+          tx.oncomplete = () => res(deck);
+          tx.onerror = rej;
+        });
+      },
+      async deleteDeck(deckId) {
+        return new Promise((res, rej) => {
+          const tx = db.transaction(['decks', 'cards'], 'readwrite');
+          tx.objectStore('decks').delete(deckId);
+          const cardStore = tx.objectStore('cards');
+          const index = cardStore.index('deckId');
+          const req = index.openCursor(IDBKeyRange.only(deckId));
+          req.onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor) {
+              cursor.delete();
+              cursor.continue();
+            }
+          };
+          tx.oncomplete = () => res();
+          tx.onerror = rej;
+        });
+      },
+      async getCardsByDeck(deckId) {
+        return new Promise((res, rej) => {
+          const tx = db.transaction('cards', 'readonly');
+          const index = tx.objectStore('cards').index('deckId');
+          const req = index.getAll(IDBKeyRange.only(deckId));
+          req.onsuccess = () => res(req.result || []);
+          req.onerror = rej;
+        });
+      },
+      async addCards(cards) {
+        return new Promise((res, rej) => {
+          const tx = db.transaction('cards', 'readwrite');
+          const store = tx.objectStore('cards');
+          cards.forEach(c => store.put(c));
+          tx.oncomplete = () => res();
+          tx.onerror = rej;
+        });
+      },
+      async deleteCard(cardId) {
+        return new Promise((res, rej) => {
+          const tx = db.transaction('cards', 'readwrite');
+          tx.objectStore('cards').delete(cardId);
+          tx.oncomplete = () => res();
+          tx.onerror = rej;
+        });
+      }
+    };
+
+    // --- 状态定义 ---
+    let currentDeckId = null;
+    let cardQueue = [];
+    let currentIndex = 0;
+    let isFlipped = false;
+    let activeSeparator = '\t';
+
+    // 默认内置初始化数据
+    const INITIAL_DECK = {
+      id: 'default_deck_it_life',
+      name: 'N5-N4 高频日常 & 职场基础',
+      createdAt: Date.now()
+    };
+    const INITIAL_CARDS = [
+      { id: '1', deckId: 'default_deck_it_life', front: '会社', furigana: 'かいしゃ', meaning: '公司' },
+      { id: '2', deckId: 'default_deck_it_life', front: '電話', furigana: 'でんわ', meaning: '电话' },
+      { id: '3', deckId: 'default_deck_it_life', front: '開発', furigana: 'かいはつ', meaning: '开发 / 研发' },
+      { id: '4', deckId: 'default_deck_it_life', front: '確認', furigana: 'かくにん', meaning: '确认 / 核对' },
+      { id: '5', deckId: 'default_deck_it_life', front: '仕様書', furigana: 'しようしょ', meaning: '规格说明书' },
+      { id: '6', deckId: 'default_deck_it_life', front: '約束', furigana: 'やくそく', meaning: '约定 / 承诺' },
+      { id: '7', deckId: 'default_deck_it_life', front: '残業', furigana: 'ざんぎょう', meaning: '加班' },
+      { id: '8', deckId: 'default_deck_it_life', front: '連絡', furigana: 'れんらく', meaning: '联络 / 联系' }
+    ];
+
+    // --- 语音合成引擎 (Web Speech API) ---
+    function speakJapanese(text) {
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel(); // 停止当前正在播放的
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'ja-JP';
+      const speed = parseFloat(document.getElementById('voiceSpeedSelect').value) || 1.0;
+      utterance.rate = speed;
+
+      // 寻找最适合的日语真人声音
+      const voices = window.speechSynthesis.getVoices();
+      const jaVoice = voices.find(v => v.lang.startsWith('ja') || v.lang.replace('_', '-').includes('ja-JP'));
+      if (jaVoice) utterance.voice = jaVoice;
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // 解决部分浏览器延迟载入声音列表的问题
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    }
+
+    // --- 界面渲染与逻辑 ---
+    const elFront = document.getElementById('cardFrontText');
+    const elBackFuri = document.getElementById('cardBackFurigana');
+    const elBackMean = document.getElementById('cardBackMeaning');
+    const elCardInner = document.getElementById('cardInner');
+    const elProgress = document.getElementById('progressBar');
+    const elProgressText = document.getElementById('deckProgressText');
+
+    function renderCurrentCard() {
+      if (cardQueue.length === 0) {
+        elFront.innerText = '🎉 牌组已全部完成！';
+        elBackFuri.innerText = '点击左上角可切换牌组';
+        elBackMeaning.innerText = '或点击导入添加新卡片';
+        elProgress.style.width = '100%';
+        elProgressText.innerText = '完成';
+        return;
+      }
+
+      if (currentIndex >= cardQueue.length) {
+        currentIndex = 0;
+      }
+
+      const card = cardQueue[currentIndex];
+      elFront.innerText = card.front;
+      elBackFuri.innerText = card.furigana || card.front;
+      elBackMean.innerText = card.meaning || '';
+
+      const percent = Math.round(((currentIndex + 1) / cardQueue.length) * 100);
+      elProgress.style.width = `${percent}%`;
+      elProgressText.innerText = `${currentIndex + 1} / ${cardQueue.length}`;
+
+      // 恢复未翻转正面
+      setFlipState(false);
+    }
+
+    function setFlipState(flip) {
+      isFlipped = flip;
+      if (isFlipped) {
+        elCardInner.classList.add('rotate-y-180');
+        // 关键体验：翻开瞬间自动发音！
+        if (cardQueue[currentIndex]) {
+          speakJapanese(cardQueue[currentIndex].front);
+        }
+      } else {
+        elCardInner.classList.remove('rotate-y-180');
+      }
+    }
+
+    function toggleFlip() {
+      if (cardQueue.length === 0) return;
+      setFlipState(!isFlipped);
+    }
+
+    function handlePass() {
+      if (cardQueue.length === 0) return;
+      // 熟练掌握：移出当前训练队列或进入下一张
+      cardQueue.splice(currentIndex, 1);
+      renderCurrentCard();
+    }
+
+    function handleFail() {
+      if (cardQueue.length === 0) return;
+      // 生疏：将当前卡片重新插回 3 张之后，强制稍后复习
+      const [failedCard] = cardQueue.splice(currentIndex, 1);
+      const insertIndex = Math.min(currentIndex + 3, cardQueue.length);
+      cardQueue.splice(insertIndex, 0, failedCard);
+      renderCurrentCard();
+    }
+
+    // --- 侧边栏与目录抽屉 ---
+    async function refreshDrawer() {
+      const decks = await dbService.getAllDecks();
+      const deckSelector = document.getElementById('deckSelector');
+      deckSelector.innerHTML = '';
+      
+      decks.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = d.name;
+        if (d.id === currentDeckId) opt.selected = true;
+        deckSelector.appendChild(opt);
+      });
+
+      const currentDeck = decks.find(d => d.id === currentDeckId);
+      document.getElementById('currentDeckTitle').innerText = currentDeck ? currentDeck.name : '未选择牌组';
+
+      // 渲染该牌组内所有卡片目录
+      const cards = await dbService.getCardsByDeck(currentDeckId);
+      document.getElementById('drawerCardCount').innerText = cards.length;
+      const listContainer = document.getElementById('drawerCardList');
+      listContainer.innerHTML = '';
+
+      cards.forEach(c => {
+        const row = document.createElement('div');
+        row.className = 'bg-slate-800/80 p-2.5 rounded-lg border border-slate-700/60 flex items-center justify-between text-xs';
+        row.innerHTML = `
+          <div class="overflow-hidden pr-2">
+            <div class="font-bold text-slate-200 text-sm truncate">${c.front}</div>
+            <div class="text-slate-400 truncate">${c.furigana || ''} · ${c.meaning || ''}</div>
+          </div>
+          <button data-id="${c.id}" class="btn-del-card p-1.5 hover:bg-rose-950/40 text-slate-500 hover:text-rose-400 rounded transition">
+            <i data-lucide="trash" class="w-3.5 h-3.5"></i>
+          </button>
+        `;
+        listContainer.appendChild(row);
+      });
+
+      lucide.createIcons();
+
+      // 绑定单条删除
+      listContainer.querySelectorAll('.btn-del-card').forEach(btn => {
+        btn.onclick = async (e) => {
+          const id = e.currentTarget.getAttribute('data-id');
+          await dbService.deleteCard(id);
+          await loadDeck(currentDeckId);
+          await refreshDrawer();
+        };
+      });
+    }
+
+    async function loadDeck(deckId) {
+      currentDeckId = deckId;
+      const cards = await dbService.getCardsByDeck(deckId);
+      // 随机打乱队列以加深记忆
+      cardQueue = [...cards].sort(() => Math.random() - 0.5);
+      currentIndex = 0;
+      renderCurrentCard();
+    }
+
+    // --- 批量导入逻辑 ---
+    document.querySelectorAll('.sep-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.sep-btn').forEach(b => {
+          b.classList.remove('bg-indigo-600', 'text-white');
+          b.classList.add('bg-slate-800', 'text-slate-300');
+        });
+        btn.classList.add('bg-indigo-600', 'text-white');
+        activeSeparator = btn.getAttribute('data-sep');
+        document.getElementById('customSeparator').value = '';
+      });
+    });
+
+    document.getElementById('btnExecuteImport').addEventListener('click', async () => {
+      const text = document.getElementById('importTextarea').value.trim();
+      if (!text) {
+        alert('请在文本框输入或粘贴卡片内容');
+        return;
+      }
+
+      const customSep = document.getElementById('customSeparator').value;
+      const sep = customSep || activeSeparator;
+
+      const deckNameInput = document.getElementById('importDeckName').value.trim();
+      let targetDeckId = currentDeckId;
+
+      if (deckNameInput) {
+        targetDeckId = 'deck_' + Date.now();
+        await dbService.saveDeck({ id: targetDeckId, name: deckNameInput, createdAt: Date.now() });
+      }
+
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const newCards = [];
+
+      lines.forEach((line, idx) => {
+        let parts = line.split(sep === '\\t' ? '\t' : sep).map(p => p.trim());
+        if (parts.length >= 2) {
+          const front = parts[0];
+          let furigana = parts[1];
+          let meaning = parts.slice(2).join(' ') || '';
+
+          // 兼容格式："会社, 公司" (无假名时)
+          if (!meaning && parts.length === 2 && !/[\u3040-\u309F\u30A0-\u30FF]/.test(furigana)) {
+            meaning = furigana;
+            furigana = front;
+          }
+
+          newCards.push({
+            id: 'card_' + Date.now() + '_' + idx,
+            deckId: targetDeckId,
+            front,
+            furigana,
+            meaning
+          });
+        }
+      });
+
+      if (newCards.length === 0) {
+        alert('未能识别有效卡片，请检查分隔符设置是否正确');
+        return;
+      }
+
+      await dbService.addCards(newCards);
+      document.getElementById('importTextarea').value = '';
+      document.getElementById('importDeckName').value = '';
+      document.getElementById('importModal').classList.add('hidden');
+
+      await loadDeck(targetDeckId);
+      await refreshDrawer();
+      alert(`成功导入 ${newCards.length} 张卡片！`);
+    });
+
+    // --- 键盘快捷键监听 ---
+    window.addEventListener('keydown', (e) => {
+      // 避免输入框内打字触发快捷键
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        toggleFlip();
+      } else if (e.code === 'ArrowRight' || e.code === 'Enter') {
+        e.preventDefault();
+        handlePass();
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        handleFail();
+      } else if (e.code === 'KeyR') {
+        e.preventDefault();
+        if (cardQueue[currentIndex]) speakJapanese(cardQueue[currentIndex].front);
+      }
+    });
+
+    // --- UI 按钮交互绑定 ---
+    document.getElementById('cardContainer').onclick = toggleFlip;
+    document.getElementById('btnFlip').onclick = toggleFlip;
+    document.getElementById('btnPass').onclick = handlePass;
+    document.getElementById('btnFail').onclick = handleFail;
+    document.getElementById('btnReplayVoice').onclick = (e) => {
+      e.stopPropagation();
+      if (cardQueue[currentIndex]) speakJapanese(cardQueue[currentIndex].front);
+    };
+
+    // 抽屉开关
+    const drawer = document.getElementById('drawer');
+    const drawerOverlay = document.getElementById('drawerOverlay');
+    const openDrawer = () => {
+      drawer.classList.remove('-translate-x-full');
+      drawerOverlay.classList.remove('hidden');
+    };
+    const closeDrawer = () => {
+      drawer.classList.add('-translate-x-full');
+      drawerOverlay.classList.add('hidden');
+    };
+    document.getElementById('btnOpenDrawer').onclick = openDrawer;
+    document.getElementById('btnCloseDrawer').onclick = closeDrawer;
+    drawerOverlay.onclick = closeDrawer;
+
+    // 导入模态框开关
+    const modal = document.getElementById('importModal');
+    document.getElementById('btnOpenImport').onclick = () => modal.classList.remove('hidden');
+    document.getElementById('btnCloseImport').onclick = () => modal.classList.add('hidden');
+    document.getElementById('btnCancelImport').onclick = () => modal.classList.add('hidden');
+
+    // 新建与切换牌组
+    document.getElementById('deckSelector').onchange = (e) => {
+      loadDeck(e.target.value);
+      refreshDrawer();
+      closeDrawer();
+    };
+    document.getElementById('btnNewDeckPrompt').onclick = async () => {
+      const name = prompt('请输入新牌组名称：');
+      if (name && name.trim()) {
+        const id = 'deck_' + Date.now();
+        await dbService.saveDeck({ id, name: name.trim(), createdAt: Date.now() });
+        await loadDeck(id);
+        await refreshDrawer();
+      }
+    };
+    document.getElementById('btnDeleteCurrentDeck').onclick = async () => {
+      const decks = await dbService.getAllDecks();
+      if (decks.length <= 1) {
+        alert('至少需要保留一个牌组');
+        return;
+      }
+      if (confirm('确认删除当前牌组及其所有卡片吗？此操作无法撤销。')) {
+        await dbService.deleteDeck(currentDeckId);
+        const remaining = await dbService.getAllDecks();
+        await loadDeck(remaining[0].id);
+        await refreshDrawer();
+      }
+    };
+
+    // 导出备份 (JSON)
+    document.getElementById('btnExportJSON').onclick = async () => {
+      const decks = await dbService.getAllDecks();
+      const currentDeck = decks.find(d => d.id === currentDeckId);
+      const cards = await dbService.getCardsByDeck(currentDeckId);
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ deck: currentDeck, cards }, null, 2));
+      const dlAnchor = document.createElement('a');
+      dlAnchor.setAttribute("href", dataStr);
+      dlAnchor.setAttribute("download", `${currentDeck ? currentDeck.name : 'deck'}_backup.json`);
+      dlAnchor.click();
+    };
+
+    // --- 初始化流程 ---
+    window.addEventListener('DOMContentLoaded', async () => {
+      lucide.createIcons();
+      await initDB();
+
+      const existingDecks = await dbService.getAllDecks();
+      if (existingDecks.length === 0) {
+        // 首次打开注入示范数据
+        await dbService.saveDeck(INITIAL_DECK);
+        await dbService.addCards(INITIAL_CARDS);
+        currentDeckId = INITIAL_DECK.id;
+      } else {
+        currentDeckId = existingDecks[0].id;
+      }
+
+      await loadDeck(currentDeckId);
+      await refreshDrawer();
+    });
+  </script>
+</body>
+</html>
